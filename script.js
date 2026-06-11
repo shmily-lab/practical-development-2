@@ -438,17 +438,19 @@ function initQRGenerator() {
 function initQRScanner() {
     let scannerActive = false;
     let html5QrCode = null;
-    
+    let scanHandled = false;  // 防止回调重复触发
+
     const startBtn = document.getElementById('startScan');
     const stopBtn = document.getElementById('stopScan');
     const scanFromFile = document.getElementById('scanFromFile');
     const copyBtn = document.getElementById('copyResultBtn');
     const scannerView = document.getElementById('qr-reader');
     const placeholder = document.getElementById('scannerPlaceholder');
-    
+
     if (startBtn) {
         startBtn.addEventListener('click', async () => {
             if (scannerActive) return;
+            scanHandled = false;  // 重置标志
 
             if (typeof Html5Qrcode === 'undefined') {
                 alert('二维码扫描库未加载，请检查网络后刷新页面重试');
@@ -497,40 +499,85 @@ function initQRScanner() {
                 await html5QrCode.start(
                     { facingMode: "environment" },
                     config,
-                  (decodedText) => {
+                  async (decodedText) => {
+    // ★ 防止回调重复触发（stop() 是异步的，二次触发会覆盖跳转）
+    if (scanHandled) return;
+    scanHandled = true;
+
     console.log('扫描成功:', decodedText);
 
-    // 先停止扫描器
+    // 先停止扫描器（必须 await 确保完全停止）
     if (html5QrCode) {
-        html5QrCode.stop();
+        try { await html5QrCode.stop(); } catch (e) { /* 忽略停止时的错误 */ }
         html5QrCode = null;
     }
     scannerActive = false;
     if (placeholder) placeholder.style.display = 'flex';
 
-    // 显示结果（备用）
+    // 显示结果
     const resultText = document.getElementById('scanResultText');
     const resultLink = document.getElementById('resultLink');
     const resultDiv = document.getElementById('scanResult');
+    const openBtn = document.getElementById('openResultBtn');
+
     if (resultText) resultText.textContent = decodedText;
     if (resultDiv) resultDiv.style.display = 'block';
     if (resultLink) {
         resultLink.href = decodedText;
-        resultLink.style.display = 'inline';
+        resultLink.textContent = decodedText.length > 60 ? decodedText.slice(0, 60) + '...' : decodedText;
+        resultLink.style.display = 'inline-block';
     }
 
-    // 根据平台和协议选择最佳跳转方式
+    // 识别不同支付平台的 scheme
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isAndroidUA = /android/i.test(navigator.userAgent);
     const isWxScheme = decodedText.startsWith('wxp://') || decodedText.startsWith('weixin://');
+    const isAlipayScheme = decodedText.startsWith('alipays://');
+    const isAlipayWeb = decodedText.includes('qr.alipay.com');
+    const isHttp = decodedText.startsWith('http://') || decodedText.startsWith('https://');
 
-    if (isWxScheme && isAndroid) {
-        // Android 用 intent:// 协议（无需用户手势也能唤起微信）
-        const path = decodedText.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
-        const intentUrl = `intent://${path}#Intent;scheme=wxp;package=com.tencent.mm;end`;
-        window.location.href = intentUrl;
-    } else {
-        // iOS 和普通网址：直接 location.href（iOS 会弹出"在微信中打开？"）
-        window.location.href = decodedText;
+    // 尝试跳转到支付页面
+    let redirected = false;
+
+    if (isWxScheme && isAndroidUA) {
+        // 微信支付码：优先尝试 wxp:// scheme 直接跳转
+        try {
+            window.location.replace(decodedText);
+            redirected = true;
+        } catch (e) {
+            redirected = false;
+        }
+    } else if ((isAlipayScheme || isAlipayWeb) && isAndroidUA) {
+        // 支付宝支付码：https://qr.alipay.com/... 直接跳转
+        try {
+            window.location.replace(decodedText);
+            redirected = true;
+        } catch (e) {
+            redirected = false;
+        }
+    } else if (isHttp || decodedText.startsWith('wxp://') || decodedText.startsWith('alipays://')) {
+        // 普通网址或其他 scheme：直接跳转
+        try {
+            window.location.replace(decodedText);
+            redirected = true;
+        } catch (e) {
+            redirected = false;
+        }
+    }
+
+    // 如果跳转可能失败（异步回调中 Chrome 可能拦截 scheme 跳转），
+    // 显示手动打开按钮让用户点击（用户手势不会被拦截）
+    if (!redirected || isWxScheme || isAlipayScheme) {
+        setTimeout(() => {
+            // 如果 500ms 后还在当前页面，说明跳转被拦截了
+            if (openBtn) {
+                openBtn.style.display = 'inline-block';
+                openBtn.onclick = () => {
+                    window.location.replace(decodedText);
+                };
+            }
+            if (resultLink) resultLink.style.display = 'inline-block';
+        }, 500);
     }
 },
                     (error) => { console.log('扫描中...'); }
@@ -580,25 +627,41 @@ function initQRScanner() {
                     // 显示结果
                     const resultText = document.getElementById('scanResultText');
                     const resultLink = document.getElementById('resultLink');
+                    const resultDiv = document.getElementById('scanResult');
+                    const openBtn = document.getElementById('openResultBtn');
                     if (resultText) resultText.textContent = result;
+                    if (resultDiv) resultDiv.style.display = 'block';
                     if (resultLink) {
                         resultLink.href = result;
+                        resultLink.textContent = result.length > 60 ? result.slice(0, 60) + '...' : result;
                         resultLink.style.display = result.startsWith('http') ? 'inline-block' : 'inline';
                     }
 
                     // 根据平台和协议选择最佳跳转方式
                     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-                    const isAndroid = /android/i.test(navigator.userAgent);
+                    const isAndroidUA = /android/i.test(navigator.userAgent);
                     const isWxScheme = result.startsWith('wxp://') || result.startsWith('weixin://');
+                    const isAlipayScheme = result.startsWith('alipays://');
+                    const isAlipayWeb = result.includes('qr.alipay.com');
+                    const isHttp = result.startsWith('http://') || result.startsWith('https://');
 
-                    if (isWxScheme && isAndroid) {
-                        // Android 用 intent:// 协议（无需用户手势也能唤起微信）
-                        const path = result.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
-                        const intentUrl = `intent://${path}#Intent;scheme=wxp;package=com.tencent.mm;end`;
-                        window.location.href = intentUrl;
-                    } else {
-                        // iOS 和普通网址：直接 location.href（iOS 会弹出"在微信中打开？"）
-                        window.location.href = result;
+                    // 尝试跳转
+                    try {
+                        window.location.replace(result);
+                    } catch (e) {
+                        // 跳转失败，不处理
+                    }
+
+                    // 如果是支付 scheme（可能被浏览器拦截），显示手动按钮
+                    if (isWxScheme || isAlipayScheme || isAlipayWeb) {
+                        setTimeout(() => {
+                            if (openBtn) {
+                                openBtn.style.display = 'inline-block';
+                                openBtn.onclick = () => {
+                                    window.location.replace(result);
+                                };
+                            }
+                        }, 500);
                     }
                 } catch (err) {
                     console.error('文件扫描失败:', err);
