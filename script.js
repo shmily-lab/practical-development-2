@@ -534,10 +534,13 @@ function initQRScanner() {
             fileInput.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-                
+
                 try {
                     const scanner = new Html5Qrcode("qr-reader");
                     const result = await scanner.scanFile(file, false);
+                    console.log('文件扫描成功:', result);
+
+                    // 显示结果
                     const resultText = document.getElementById('scanResultText');
                     const resultLink = document.getElementById('resultLink');
                     if (resultText) resultText.textContent = result;
@@ -547,7 +550,16 @@ function initQRScanner() {
                     } else if (resultLink) {
                         resultLink.style.display = 'none';
                     }
-                    console.log('文件扫描成功:', result);
+
+                    // 自动跳转
+                    if (result.startsWith('http://') || result.startsWith('https://')) {
+                        window.location.href = result;
+                    } else {
+                        const newWindow = window.open(result, '_blank');
+                        if (!newWindow) {
+                            window.location.href = result;
+                        }
+                    }
                 } catch (err) {
                     console.error('文件扫描失败:', err);
                     alert('未能识别二维码');
