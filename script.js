@@ -467,7 +467,7 @@ function initQRScanner() {
     // 扫描成功后跳转
     console.log('扫描成功:', decodedText);
 
-    // 显示扫描结果
+    // 显示扫描结果（作为跳转失败时的备用）
     const resultText = document.getElementById('scanResultText');
     const resultLink = document.getElementById('resultLink');
     const resultDiv = document.getElementById('scanResult');
@@ -486,17 +486,9 @@ function initQRScanner() {
     scannerActive = false;
     if (placeholder) placeholder.style.display = 'flex';
 
-    // 跳转：http/https 用 location.href，wxp 等自定义协议用 window.open
-    if (decodedText.startsWith('http://') || decodedText.startsWith('https://')) {
-        window.location.href = decodedText;
-    } else {
-        // 自定义协议（如 wxp://），用 window.open 触发系统协议处理器
-        const newWindow = window.open(decodedText, '_blank');
-        if (!newWindow) {
-            // 浏览器拦截了弹窗，降级用 location.href
-            window.location.href = decodedText;
-        }
-    }
+    // 统一用 location.href 跳转
+    // http/https 直接打开网页，wxp:// 等自定义协议会唤起对应APP（如微信）
+    window.location.href = decodedText;
 },
                     (error) => { console.log('扫描中...'); }
                 );
@@ -552,14 +544,8 @@ function initQRScanner() {
                     }
 
                     // 自动跳转
-                    if (result.startsWith('http://') || result.startsWith('https://')) {
-                        window.location.href = result;
-                    } else {
-                        const newWindow = window.open(result, '_blank');
-                        if (!newWindow) {
-                            window.location.href = result;
-                        }
-                    }
+                    // http/https 直接打开网页，wxp:// 等自定义协议会唤起对应APP（如微信）
+                    window.location.href = result;
                 } catch (err) {
                     console.error('文件扫描失败:', err);
                     alert('未能识别二维码');
