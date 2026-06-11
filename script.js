@@ -449,17 +449,51 @@ function initQRScanner() {
     if (startBtn) {
         startBtn.addEventListener('click', async () => {
             if (scannerActive) return;
-            
+
             if (typeof Html5Qrcode === 'undefined') {
                 alert('二维码扫描库未加载，请检查网络后刷新页面重试');
                 console.error('Html5Qrcode 未定义');
                 return;
             }
-            
+
+            const isAndroid = /android/i.test(navigator.userAgent);
+            const isHTTP = location.protocol === 'http:' &&
+                location.hostname !== 'localhost' &&
+                location.hostname !== '127.0.0.1';
+
+            // Android Chrome 强制要求 HTTPS 才能使用摄像头
+            if (isAndroid && isHTTP) {
+                alert('⚠️ Android 浏览器要求 HTTPS 才能使用摄像头。\n\n' +
+                    '当前是 HTTP 连接，摄像头无法启动。\n\n' +
+                    '💡 请使用"从相册选择"功能扫描二维码图片。');
+                return;
+            }
+
+            // 预检查：是否有可用摄像头
+            try {
+                const cameras = await Html5Qrcode.getCameras();
+                if (!cameras || cameras.length === 0) {
+                    alert('未检测到摄像头。\n\n💡 请使用"从相册选择"功能扫描二维码图片。');
+                    return;
+                }
+            } catch (camErr) {
+                console.error('获取摄像头失败:', camErr);
+                if (isAndroid) {
+                    alert('无法访问摄像头。\n\n' +
+                        '可能原因：\n' +
+                        '① 摄像头权限未授予 → 请到浏览器设置中允许\n' +
+                        '② 使用 HTTP 协议 → 需要 HTTPS\n\n' +
+                        '💡 请尝试使用"从相册选择"功能。');
+                } else {
+                    alert('无法访问摄像头，请在系统设置中允许浏览器使用摄像头。');
+                }
+                return;
+            }
+
             try {
                 html5QrCode = new Html5Qrcode("qr-reader");
                 const config = { fps: 10, qrbox: { width: 250, height: 250 } };
-                
+
                 await html5QrCode.start(
                     { facingMode: "environment" },
                     config,
@@ -487,7 +521,6 @@ function initQRScanner() {
 
     // 根据平台和协议选择最佳跳转方式
     const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isAndroid = /android/i.test(navigator.userAgent);
     const isWxScheme = decodedText.startsWith('wxp://') || decodedText.startsWith('weixin://');
 
     if (isWxScheme && isAndroid) {
@@ -507,7 +540,9 @@ function initQRScanner() {
                 console.log('扫描器启动成功');
             } catch (err) {
                 console.error('启动扫描器失败:', err);
-                alert('无法启动摄像头，请检查权限设置');
+                alert('无法启动摄像头。\n\n' +
+                    '💡 请尝试使用"从相册选择"功能：\n' +
+                    '先将二维码截图保存，再从相册中选择图片扫描。');
             }
         });
     }
