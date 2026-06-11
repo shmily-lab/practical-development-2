@@ -464,21 +464,9 @@ function initQRScanner() {
                     { facingMode: "environment" },
                     config,
                   (decodedText) => {
-    // 扫描成功后跳转
     console.log('扫描成功:', decodedText);
 
-    // 显示扫描结果（作为跳转失败时的备用）
-    const resultText = document.getElementById('scanResultText');
-    const resultLink = document.getElementById('resultLink');
-    const resultDiv = document.getElementById('scanResult');
-    if (resultText) resultText.textContent = decodedText;
-    if (resultLink) {
-        resultLink.href = decodedText;
-        resultLink.style.display = 'inline';
-    }
-    if (resultDiv) resultDiv.style.display = 'block';
-
-    // 停止扫描器
+    // 先停止扫描器
     if (html5QrCode) {
         html5QrCode.stop();
         html5QrCode = null;
@@ -486,9 +474,31 @@ function initQRScanner() {
     scannerActive = false;
     if (placeholder) placeholder.style.display = 'flex';
 
-    // 统一用 location.href 跳转
-    // http/https 直接打开网页，wxp:// 等自定义协议会唤起对应APP（如微信）
-    window.location.href = decodedText;
+    // 显示结果（备用）
+    const resultText = document.getElementById('scanResultText');
+    const resultLink = document.getElementById('resultLink');
+    const resultDiv = document.getElementById('scanResult');
+    if (resultText) resultText.textContent = decodedText;
+    if (resultDiv) resultDiv.style.display = 'block';
+    if (resultLink) {
+        resultLink.href = decodedText;
+        resultLink.style.display = 'inline';
+    }
+
+    // 根据平台和协议选择最佳跳转方式
+    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+    const isAndroid = /android/i.test(navigator.userAgent);
+    const isWxScheme = decodedText.startsWith('wxp://') || decodedText.startsWith('weixin://');
+
+    if (isWxScheme && isAndroid) {
+        // Android 用 intent:// 协议（无需用户手势也能唤起微信）
+        const path = decodedText.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
+        const intentUrl = `intent://${path}#Intent;scheme=wxp;package=com.tencent.mm;end`;
+        window.location.href = intentUrl;
+    } else {
+        // iOS 和普通网址：直接 location.href（iOS 会弹出"在微信中打开？"）
+        window.location.href = decodedText;
+    }
 },
                     (error) => { console.log('扫描中...'); }
                 );
@@ -536,16 +546,25 @@ function initQRScanner() {
                     const resultText = document.getElementById('scanResultText');
                     const resultLink = document.getElementById('resultLink');
                     if (resultText) resultText.textContent = result;
-                    if (resultLink && result.startsWith('http')) {
+                    if (resultLink) {
                         resultLink.href = result;
-                        resultLink.style.display = 'inline-block';
-                    } else if (resultLink) {
-                        resultLink.style.display = 'none';
+                        resultLink.style.display = result.startsWith('http') ? 'inline-block' : 'inline';
                     }
 
-                    // 自动跳转
-                    // http/https 直接打开网页，wxp:// 等自定义协议会唤起对应APP（如微信）
-                    window.location.href = result;
+                    // 根据平台和协议选择最佳跳转方式
+                    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+                    const isAndroid = /android/i.test(navigator.userAgent);
+                    const isWxScheme = result.startsWith('wxp://') || result.startsWith('weixin://');
+
+                    if (isWxScheme && isAndroid) {
+                        // Android 用 intent:// 协议（无需用户手势也能唤起微信）
+                        const path = result.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
+                        const intentUrl = `intent://${path}#Intent;scheme=wxp;package=com.tencent.mm;end`;
+                        window.location.href = intentUrl;
+                    } else {
+                        // iOS 和普通网址：直接 location.href（iOS 会弹出"在微信中打开？"）
+                        window.location.href = result;
+                    }
                 } catch (err) {
                     console.error('文件扫描失败:', err);
                     alert('未能识别二维码');
