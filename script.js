@@ -447,6 +447,85 @@ function initQRScanner() {
     const scannerView = document.getElementById('qr-reader');
     const placeholder = document.getElementById('scannerPlaceholder');
 
+    // ★ 统一处理扫描结果
+    //    - 收款码（微信/支付宝 scheme）→ 显示按钮，让用户点击跳转
+    //    - 普通 http/https 链接 → 自动跳转
+    //    - 纯文本 → 仅展示
+    function handleScanResult(decodedText) {
+        const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
+        const isAndroid = /android/i.test(navigator.userAgent);
+        const isWxScheme = decodedText.startsWith('wxp://') || decodedText.startsWith('weixin://');
+        const isAlipayScheme = decodedText.startsWith('alipays://');
+        const isAlipayWeb = decodedText.includes('qr.alipay.com');
+        const isHttp = decodedText.startsWith('http://') || decodedText.startsWith('https://');
+        const isPayment = isWxScheme || isAlipayScheme || isAlipayWeb;
+
+        // 显示结果文字
+        const resultText = document.getElementById('scanResultText');
+        const resultLink = document.getElementById('resultLink');
+        const resultDiv = document.getElementById('scanResult');
+        const openBtn = document.getElementById('openResultBtn');
+        const resultTip = document.getElementById('resultTip');
+
+        if (resultDiv) resultDiv.style.display = 'block';
+        if (resultText) resultText.textContent = decodedText;
+
+        // 重置按钮和提示
+        if (openBtn) openBtn.style.display = 'none';
+        if (resultTip) resultTip.style.display = 'none';
+
+        // 显示可点击链接
+        if (resultLink) {
+            resultLink.href = decodedText;
+            resultLink.textContent = decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText;
+            resultLink.style.display = 'inline-block';
+        }
+
+        if (isPayment) {
+            // ========== 收款码：显示按钮，不自动跳转 ==========
+            if (isWxScheme) {
+                if (openBtn) {
+                    openBtn.textContent = '💚 打开微信支付';
+                    openBtn.style.display = 'inline-block';
+                    openBtn.onclick = function() {
+                        window.location.href = decodedText;
+                    };
+                }
+                if (resultTip) {
+                    if (isIOS) {
+                        resultTip.textContent = '⚠️ 若按钮无效，请长按上方链接 →「在微信中打开」';
+                    } else {
+                        resultTip.textContent = '点击按钮将跳转到微信完成支付';
+                    }
+                    resultTip.style.display = 'block';
+                }
+            } else if (isAlipayScheme || isAlipayWeb) {
+                if (openBtn) {
+                    openBtn.textContent = '💙 打开支付宝';
+                    openBtn.style.display = 'inline-block';
+                    openBtn.onclick = function() {
+                        window.location.href = decodedText;
+                    };
+                }
+                if (resultTip) {
+                    resultTip.textContent = '点击按钮将跳转到支付宝完成支付';
+                    resultTip.style.display = 'block';
+                }
+            }
+        } else if (isHttp) {
+            // ========== 普通网址：自动跳转 ==========
+            if (resultTip) {
+                resultTip.textContent = '正在跳转...';
+                resultTip.style.display = 'block';
+            }
+            // 延迟 300ms 让用户看到结果再跳
+            setTimeout(function() {
+                window.location.href = decodedText;
+            }, 300);
+        }
+        // 纯文本：只展示结果（上面已经显示），不做任何跳转
+    }
+
     if (startBtn) {
         startBtn.addEventListener('click', async () => {
             if (scannerActive) return;
@@ -500,85 +579,22 @@ function initQRScanner() {
                     { facingMode: "environment" },
                     config,
                   async (decodedText) => {
-    // ★ 防止回调重复触发（stop() 是异步的，二次触发会覆盖跳转）
+    // 防止回调重复触发
     if (scanHandled) return;
     scanHandled = true;
 
     console.log('扫描成功:', decodedText);
 
-    // 先停止扫描器（必须 await 确保完全停止）
+    // 停止扫描器
     if (html5QrCode) {
-        try { await html5QrCode.stop(); } catch (e) { /* 忽略停止时的错误 */ }
+        try { await html5QrCode.stop(); } catch (e) {}
         html5QrCode = null;
     }
     scannerActive = false;
     if (placeholder) placeholder.style.display = 'flex';
 
-    // 显示结果
-    const resultText = document.getElementById('scanResultText');
-    const resultLink = document.getElementById('resultLink');
-    const resultDiv = document.getElementById('scanResult');
-    const openBtn = document.getElementById('openResultBtn');
-
-    if (resultText) resultText.textContent = decodedText;
-    if (resultDiv) resultDiv.style.display = 'block';
-    if (resultLink) {
-        resultLink.href = decodedText;
-        resultLink.textContent = decodedText.length > 60 ? decodedText.slice(0, 60) + '...' : decodedText;
-        resultLink.style.display = 'inline-block';
-    }
-
-    // 识别不同支付平台的 scheme
-    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-    const isAndroidUA = /android/i.test(navigator.userAgent);
-    const isWxScheme = decodedText.startsWith('wxp://') || decodedText.startsWith('weixin://');
-    const isAlipayScheme = decodedText.startsWith('alipays://');
-    const isAlipayWeb = decodedText.includes('qr.alipay.com');
-    const isHttp = decodedText.startsWith('http://') || decodedText.startsWith('https://');
-
-    // 尝试跳转到支付页面
-    let redirected = false;
-
-    if (isWxScheme && isAndroidUA) {
-        // 微信支付码：优先尝试 wxp:// scheme 直接跳转
-        try {
-            window.location.replace(decodedText);
-            redirected = true;
-        } catch (e) {
-            redirected = false;
-        }
-    } else if ((isAlipayScheme || isAlipayWeb) && isAndroidUA) {
-        // 支付宝支付码：https://qr.alipay.com/... 直接跳转
-        try {
-            window.location.replace(decodedText);
-            redirected = true;
-        } catch (e) {
-            redirected = false;
-        }
-    } else if (isHttp || decodedText.startsWith('wxp://') || decodedText.startsWith('alipays://')) {
-        // 普通网址或其他 scheme：直接跳转
-        try {
-            window.location.replace(decodedText);
-            redirected = true;
-        } catch (e) {
-            redirected = false;
-        }
-    }
-
-    // 如果跳转可能失败（异步回调中 Chrome 可能拦截 scheme 跳转），
-    // 显示手动打开按钮让用户点击（用户手势不会被拦截）
-    if (!redirected || isWxScheme || isAlipayScheme) {
-        setTimeout(() => {
-            // 如果 500ms 后还在当前页面，说明跳转被拦截了
-            if (openBtn) {
-                openBtn.style.display = 'inline-block';
-                openBtn.onclick = () => {
-                    window.location.replace(decodedText);
-                };
-            }
-            if (resultLink) resultLink.style.display = 'inline-block';
-        }, 500);
-    }
+    // 统一处理结果（收款码展示按钮，普通链接自动跳转）
+    handleScanResult(decodedText);
 },
                     (error) => { console.log('扫描中...'); }
                 );
@@ -624,45 +640,8 @@ function initQRScanner() {
                     const result = await scanner.scanFile(file, false);
                     console.log('文件扫描成功:', result);
 
-                    // 显示结果
-                    const resultText = document.getElementById('scanResultText');
-                    const resultLink = document.getElementById('resultLink');
-                    const resultDiv = document.getElementById('scanResult');
-                    const openBtn = document.getElementById('openResultBtn');
-                    if (resultText) resultText.textContent = result;
-                    if (resultDiv) resultDiv.style.display = 'block';
-                    if (resultLink) {
-                        resultLink.href = result;
-                        resultLink.textContent = result.length > 60 ? result.slice(0, 60) + '...' : result;
-                        resultLink.style.display = result.startsWith('http') ? 'inline-block' : 'inline';
-                    }
-
-                    // 根据平台和协议选择最佳跳转方式
-                    const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
-                    const isAndroidUA = /android/i.test(navigator.userAgent);
-                    const isWxScheme = result.startsWith('wxp://') || result.startsWith('weixin://');
-                    const isAlipayScheme = result.startsWith('alipays://');
-                    const isAlipayWeb = result.includes('qr.alipay.com');
-                    const isHttp = result.startsWith('http://') || result.startsWith('https://');
-
-                    // 尝试跳转
-                    try {
-                        window.location.replace(result);
-                    } catch (e) {
-                        // 跳转失败，不处理
-                    }
-
-                    // 如果是支付 scheme（可能被浏览器拦截），显示手动按钮
-                    if (isWxScheme || isAlipayScheme || isAlipayWeb) {
-                        setTimeout(() => {
-                            if (openBtn) {
-                                openBtn.style.display = 'inline-block';
-                                openBtn.onclick = () => {
-                                    window.location.replace(result);
-                                };
-                            }
-                        }, 500);
-                    }
+                    // 统一处理结果
+                    handleScanResult(result);
                 } catch (err) {
                     console.error('文件扫描失败:', err);
                     alert('未能识别二维码');
