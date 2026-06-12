@@ -484,19 +484,23 @@ function initQRScanner() {
             resultLink.style.display = 'inline-block';
         }
 
-        // ★ 核心：用 <a> 标签点击来触发 scheme 跳转
-        //   window.location.href 在 iOS Safari 上对自定义 scheme 不可靠
+        // ★ 跳转辅助：iOS 用 <a> 点击，Android 用 location.href
         function openScheme(url) {
             console.log('尝试打开:', url);
-            var a = document.createElement('a');
-            a.href = url;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            // 延迟移除，确保 click 事件已触发
-            setTimeout(function() {
-                document.body.removeChild(a);
-            }, 100);
+            if (isIOS) {
+                // iOS Safari：必须用真实 <a> 标签 click
+                var a = document.createElement('a');
+                a.href = url;
+                a.style.display = 'none';
+                document.body.appendChild(a);
+                a.click();
+                setTimeout(function() {
+                    document.body.removeChild(a);
+                }, 100);
+            } else {
+                // Android / 其他平台：location.href 从用户点击事件触发，不会被拦截
+                window.location.href = url;
+            }
         }
 
         if (isPayment) {
@@ -506,15 +510,15 @@ function initQRScanner() {
                     openBtn.textContent = '💚 打开微信支付';
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
-                        // iOS 尝试 weixin:// 作为备选
                         if (isIOS && cleanText.startsWith('wxp://')) {
+                            // iOS：先试 weixin:// 再试 wxp://
                             var wxUrl = cleanText.replace(/^wxp:\/\//, 'weixin://');
                             openScheme(wxUrl);
-                            // 延迟再试 wxp:// 原始链接
                             setTimeout(function() {
                                 openScheme(cleanText);
                             }, 500);
                         } else {
+                            // Android：location.href 直接跳转
                             openScheme(cleanText);
                         }
                     };
@@ -546,7 +550,6 @@ function initQRScanner() {
                 resultTip.textContent = '正在跳转...';
                 resultTip.style.display = 'block';
             }
-            // 延迟 300ms 让用户看到结果再跳
             setTimeout(function() {
                 openScheme(cleanText);
             }, 300);
