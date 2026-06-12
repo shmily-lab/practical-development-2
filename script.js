@@ -484,18 +484,12 @@ function initQRScanner() {
             resultLink.style.display = 'inline-block';
         }
 
-        // ★ 跳转辅助：统一用 <a> 标签 click（iOS & Android 都最可靠）
-        //   location.href 对自定义 scheme (wxp://) 在 Chrome 上会静默失效
+        // ★ 跳转辅助
         function openScheme(url) {
             console.log('尝试打开:', url);
-            var a = document.createElement('a');
-            a.href = url;
-            a.style.display = 'none';
-            document.body.appendChild(a);
-            a.click();
-            setTimeout(function() {
-                document.body.removeChild(a);
-            }, 100);
+            // 优先用 location.href（iOS/普通链接都可靠）
+            // 注意：从按钮 onclick 调用，属于用户手势，不会被拦截
+            window.location.href = url;
         }
 
         // ★ Android 微信专用：构建 intent:// 链接
@@ -512,8 +506,18 @@ function initQRScanner() {
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
                         if (isAndroid) {
-                            // Android：intent:// 协议 → <a> click 唤起微信
-                            openScheme(buildWxIntentUrl(cleanText));
+                            // Android：把可见链接设为 intent://，用户点击链接必定能跳转
+                            var intentUrl = buildWxIntentUrl(cleanText);
+                            if (resultLink) {
+                                resultLink.href = intentUrl;
+                                resultLink.textContent = '点击此处跳转微信支付';
+                                resultLink.style.display = 'inline-block';
+                                resultLink.style.fontSize = '18px';
+                                resultLink.style.fontWeight = 'bold';
+                                resultLink.style.color = '#07C160';
+                            }
+                            // 同时尝试 location.href
+                            window.location.href = intentUrl;
                         } else {
                             // iOS：先试 weixin:// 再试 wxp://
                             var wxUrl = cleanText.replace(/^wxp:\/\//, 'weixin://');
@@ -525,7 +529,9 @@ function initQRScanner() {
                     };
                 }
                 if (resultTip) {
-                    if (isIOS) {
+                    if (isAndroid) {
+                        resultTip.textContent = '👆 点击上方「点击此处跳转微信支付」链接即可打开微信';
+                    } else if (isIOS) {
                         resultTip.textContent = '⚠️ 若按钮无效，请长按上方链接 →「在微信中打开」';
                     } else {
                         resultTip.textContent = '点击按钮将跳转到微信完成支付';
