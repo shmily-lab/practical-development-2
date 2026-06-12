@@ -506,8 +506,10 @@ function initQRScanner() {
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
                         if (isAndroid) {
-                            // Android：把可见链接设为 intent://，用户点击链接必定能跳转
+                            // Android 微信：三步走
                             var intentUrl = buildWxIntentUrl(cleanText);
+
+                            // 1. 将可见链接做成 intent:// 让用户直接点
                             if (resultLink) {
                                 resultLink.href = intentUrl;
                                 resultLink.textContent = '点击此处跳转微信支付';
@@ -516,7 +518,17 @@ function initQRScanner() {
                                 resultLink.style.fontWeight = 'bold';
                                 resultLink.style.color = '#07C160';
                             }
-                            // 同时尝试 location.href
+
+                            // 2. iframe 方式（国内常用绕过 Chrome 限制的 hack）
+                            var iframe = document.createElement('iframe');
+                            iframe.src = intentUrl;
+                            iframe.style.display = 'none';
+                            document.body.appendChild(iframe);
+                            setTimeout(function() {
+                                document.body.removeChild(iframe);
+                            }, 2000);
+
+                            // 3. location.href 兜底
                             window.location.href = intentUrl;
                         } else {
                             // iOS：先试 weixin:// 再试 wxp://
