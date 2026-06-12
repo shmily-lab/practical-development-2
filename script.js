@@ -452,12 +452,15 @@ function initQRScanner() {
     //    - 普通 http/https 链接 → 自动跳转
     //    - 纯文本 → 仅展示
     function handleScanResult(decodedText) {
+        // 清理扫描结果：去除首尾空白和不可见字符
+        const cleanText = decodedText.trim().replace(/[​﻿ ]/g, '');
+
         const isIOS = /iphone|ipad|ipod/i.test(navigator.userAgent);
         const isAndroid = /android/i.test(navigator.userAgent);
-        const isWxScheme = decodedText.startsWith('wxp://') || decodedText.startsWith('weixin://');
-        const isAlipayScheme = decodedText.startsWith('alipays://');
-        const isAlipayWeb = decodedText.includes('qr.alipay.com');
-        const isHttp = decodedText.startsWith('http://') || decodedText.startsWith('https://');
+        const isWxScheme = cleanText.startsWith('wxp://') || cleanText.startsWith('weixin://');
+        const isAlipayScheme = cleanText.startsWith('alipays://');
+        const isAlipayWeb = cleanText.includes('qr.alipay.com');
+        const isHttp = cleanText.startsWith('http://') || cleanText.startsWith('https://');
         const isPayment = isWxScheme || isAlipayScheme || isAlipayWeb;
 
         // 显示结果文字
@@ -468,7 +471,7 @@ function initQRScanner() {
         const resultTip = document.getElementById('resultTip');
 
         if (resultDiv) resultDiv.style.display = 'block';
-        if (resultText) resultText.textContent = decodedText;
+        if (resultText) resultText.textContent = cleanText;
 
         // 重置按钮和提示
         if (openBtn) openBtn.style.display = 'none';
@@ -476,9 +479,24 @@ function initQRScanner() {
 
         // 显示可点击链接
         if (resultLink) {
-            resultLink.href = decodedText;
-            resultLink.textContent = decodedText.length > 50 ? decodedText.slice(0, 50) + '...' : decodedText;
+            resultLink.href = cleanText;
+            resultLink.textContent = cleanText.length > 50 ? cleanText.slice(0, 50) + '...' : cleanText;
             resultLink.style.display = 'inline-block';
+        }
+
+        // ★ 核心：用 <a> 标签点击来触发 scheme 跳转
+        //   window.location.href 在 iOS Safari 上对自定义 scheme 不可靠
+        function openScheme(url) {
+            console.log('尝试打开:', url);
+            var a = document.createElement('a');
+            a.href = url;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            // 延迟移除，确保 click 事件已触发
+            setTimeout(function() {
+                document.body.removeChild(a);
+            }, 100);
         }
 
         if (isPayment) {
@@ -488,7 +506,17 @@ function initQRScanner() {
                     openBtn.textContent = '💚 打开微信支付';
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
-                        window.location.href = decodedText;
+                        // iOS 尝试 weixin:// 作为备选
+                        if (isIOS && cleanText.startsWith('wxp://')) {
+                            var wxUrl = cleanText.replace(/^wxp:\/\//, 'weixin://');
+                            openScheme(wxUrl);
+                            // 延迟再试 wxp:// 原始链接
+                            setTimeout(function() {
+                                openScheme(cleanText);
+                            }, 500);
+                        } else {
+                            openScheme(cleanText);
+                        }
                     };
                 }
                 if (resultTip) {
@@ -504,7 +532,7 @@ function initQRScanner() {
                     openBtn.textContent = '💙 打开支付宝';
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
-                        window.location.href = decodedText;
+                        openScheme(cleanText);
                     };
                 }
                 if (resultTip) {
@@ -520,7 +548,7 @@ function initQRScanner() {
             }
             // 延迟 300ms 让用户看到结果再跳
             setTimeout(function() {
-                window.location.href = decodedText;
+                openScheme(cleanText);
             }, 300);
         }
         // 纯文本：只展示结果（上面已经显示），不做任何跳转
