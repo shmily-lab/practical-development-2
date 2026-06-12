@@ -513,11 +513,12 @@ function initQRScanner() {
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
                         if (isAndroid) {
-                            // 服务端 302 重定向 → Chrome 不拦截
-                            openScheme(cleanText);
-                            // 同时把可见链接也指向服务端重定向地址
+                            // 构建 intent:// URL 然后通过服务端 302 发出
+                            var intentUrl = buildWxIntentUrl(cleanText);
+                            openScheme(intentUrl);
+                            // 可见链接也指向服务端重定向
                             if (resultLink) {
-                                var redirectUrl = location.origin + '/redirect?url=' + encodeURIComponent(cleanText);
+                                var redirectUrl = location.origin + '/redirect?url=' + encodeURIComponent(intentUrl);
                                 resultLink.href = redirectUrl;
                                 resultLink.textContent = '若未跳转，点击此处';
                                 resultLink.style.display = 'inline-block';
