@@ -484,29 +484,24 @@ function initQRScanner() {
             resultLink.style.display = 'inline-block';
         }
 
-        // ★ 跳转辅助：iOS 用 <a> 点击，Android 用 location.href
+        // ★ 跳转辅助：统一用 <a> 标签 click（iOS & Android 都最可靠）
+        //   location.href 对自定义 scheme (wxp://) 在 Chrome 上会静默失效
         function openScheme(url) {
             console.log('尝试打开:', url);
-            if (isIOS) {
-                // iOS Safari：必须用真实 <a> 标签 click
-                var a = document.createElement('a');
-                a.href = url;
-                a.style.display = 'none';
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(function() {
-                    document.body.removeChild(a);
-                }, 100);
-            } else if (isAndroid && (url.startsWith('wxp://') || url.startsWith('weixin://'))) {
-                // Android 微信：用 intent:// 协议唤起微信
-                var wxPath = url.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
-                var intentUrl = 'intent://' + wxPath + '#Intent;scheme=wxp;package=com.tencent.mm;end';
-                console.log('Intent URL:', intentUrl);
-                window.location.href = intentUrl;
-            } else {
-                // Android / 其他平台：location.href 直接跳转
-                window.location.href = url;
-            }
+            var a = document.createElement('a');
+            a.href = url;
+            a.style.display = 'none';
+            document.body.appendChild(a);
+            a.click();
+            setTimeout(function() {
+                document.body.removeChild(a);
+            }, 100);
+        }
+
+        // ★ Android 微信专用：构建 intent:// 链接
+        function buildWxIntentUrl(wxUrl) {
+            var path = wxUrl.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
+            return 'intent://' + path + '#Intent;scheme=wxp;package=com.tencent.mm;end';
         }
 
         if (isPayment) {
@@ -516,16 +511,16 @@ function initQRScanner() {
                     openBtn.textContent = '💚 打开微信支付';
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
-                        if (isIOS && cleanText.startsWith('wxp://')) {
+                        if (isAndroid) {
+                            // Android：intent:// 协议 → <a> click 唤起微信
+                            openScheme(buildWxIntentUrl(cleanText));
+                        } else {
                             // iOS：先试 weixin:// 再试 wxp://
                             var wxUrl = cleanText.replace(/^wxp:\/\//, 'weixin://');
                             openScheme(wxUrl);
                             setTimeout(function() {
                                 openScheme(cleanText);
                             }, 500);
-                        } else {
-                            // Android：location.href 直接跳转
-                            openScheme(cleanText);
                         }
                     };
                 }
