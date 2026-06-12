@@ -497,8 +497,14 @@ function initQRScanner() {
                 setTimeout(function() {
                     document.body.removeChild(a);
                 }, 100);
+            } else if (isAndroid && (url.startsWith('wxp://') || url.startsWith('weixin://'))) {
+                // Android 微信：用 intent:// 协议唤起微信
+                var wxPath = url.replace(/^wxp:\/\//, '').replace(/^weixin:\/\//, '');
+                var intentUrl = 'intent://' + wxPath + '#Intent;scheme=wxp;package=com.tencent.mm;end';
+                console.log('Intent URL:', intentUrl);
+                window.location.href = intentUrl;
             } else {
-                // Android / 其他平台：location.href 从用户点击事件触发，不会被拦截
+                // Android / 其他平台：location.href 直接跳转
                 window.location.href = url;
             }
         }
