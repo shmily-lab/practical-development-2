@@ -485,11 +485,18 @@ function initQRScanner() {
         }
 
         // ★ 跳转辅助
+        //   Android 支付 scheme：走服务端 302 重定向（Chrome 不拦服务端重定向）
+        //   iOS / 普通链接：直接 location.href
         function openScheme(url) {
             console.log('尝试打开:', url);
-            // 优先用 location.href（iOS/普通链接都可靠）
-            // 注意：从按钮 onclick 调用，属于用户手势，不会被拦截
-            window.location.href = url;
+            if (isAndroid && (url.startsWith('wxp://') || url.startsWith('weixin://') ||
+                url.startsWith('alipays://') || url.startsWith('intent://'))) {
+                // 服务端 302 重定向：Chrome 把服务端返回的 Location 当正常导航处理
+                var redirectUrl = location.origin + '/redirect?url=' + encodeURIComponent(url);
+                window.location.href = redirectUrl;
+            } else {
+                window.location.href = url;
+            }
         }
 
         // ★ Android 微信专用：构建 intent:// 链接
@@ -506,30 +513,18 @@ function initQRScanner() {
                     openBtn.style.display = 'inline-block';
                     openBtn.onclick = function() {
                         if (isAndroid) {
-                            // Android 微信：三步走
-                            var intentUrl = buildWxIntentUrl(cleanText);
-
-                            // 1. 将可见链接做成 intent:// 让用户直接点
+                            // 服务端 302 重定向 → Chrome 不拦截
+                            openScheme(cleanText);
+                            // 同时把可见链接也指向服务端重定向地址
                             if (resultLink) {
-                                resultLink.href = intentUrl;
-                                resultLink.textContent = '点击此处跳转微信支付';
+                                var redirectUrl = location.origin + '/redirect?url=' + encodeURIComponent(cleanText);
+                                resultLink.href = redirectUrl;
+                                resultLink.textContent = '若未跳转，点击此处';
                                 resultLink.style.display = 'inline-block';
-                                resultLink.style.fontSize = '18px';
+                                resultLink.style.fontSize = '16px';
                                 resultLink.style.fontWeight = 'bold';
                                 resultLink.style.color = '#07C160';
                             }
-
-                            // 2. iframe 方式（国内常用绕过 Chrome 限制的 hack）
-                            var iframe = document.createElement('iframe');
-                            iframe.src = intentUrl;
-                            iframe.style.display = 'none';
-                            document.body.appendChild(iframe);
-                            setTimeout(function() {
-                                document.body.removeChild(iframe);
-                            }, 2000);
-
-                            // 3. location.href 兜底
-                            window.location.href = intentUrl;
                         } else {
                             // iOS：先试 weixin:// 再试 wxp://
                             var wxUrl = cleanText.replace(/^wxp:\/\//, 'weixin://');
